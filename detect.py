@@ -24,6 +24,9 @@ from utils.general import check_img_size, check_requirements, check_imshow, non_
 from utils.plots import plot_one_box
 from utils.torch_utils import select_device, load_classifier, time_synchronized, TracedModel
 
+import socket
+import struct
+
 
 def detect(save_img=False):
     source, weights, view_img, save_txt, imgsz, trace = opt.source, opt.weights, opt.view_img, opt.save_txt, opt.img_size, not opt.no_trace
@@ -81,6 +84,7 @@ def detect(save_img=False):
     print("Loop starting...")
     global cam
     for path, img, im0s, vid_cap in dataset:
+        
         while True:
             #print(f"Imt dimensions before: {img.shape}")
             # print(f"im0s shape: {im0s.shape}")
@@ -173,10 +177,27 @@ def detect(save_img=False):
                 # except CvBridgeError as e:
                 #     print(e)
                 # Workaround the bridge error and manually create the image message
-            
-            cv2.imwrite("super_image.jpeg", im0)
-            quit()
-            
+            try:
+                cv2.imwrite("super_image.jpeg", im0)
+                print("Saved image")
+
+                image = cv2.imread("super_image.jpeg")
+                
+                image_array = np.array(image)
+                image_bytes = image_array.tobytes()
+
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.connect(("10.1.1.0", 12345))
+                
+                sock.sendall(struct.pack(">L", len(image_bytes)))
+                sock.sendall(image_bytes)
+                print("Image has been Sent")
+
+                sock.close()
+
+            except Exception as e:
+                print(f"An error occurred: {e}")
+
             #print(f"Starting building image message")
             #msg = Image()
             # msg.header.stamp = rospy.Time.now()
@@ -222,11 +243,13 @@ def detect(save_img=False):
             # print("sleeping 1s...")
             # time.sleep(1)
             # print("sleeping done!")
+
     if save_txt or save_img:
         s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if save_txt else ''
         #print(f"Results saved to {save_dir}{s}")
 
     print(f'Done. ({time.time() - t0:.3f}s)')
+
 
 
 if __name__ == '__main__':
