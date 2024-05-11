@@ -15,7 +15,7 @@ def gstreamer_pipeline_send(
     display_height=540,
     framerate=30,
     flip_method=0,
-    host_ip='10.1.1.0',  # Replace with your Raspberry Pi's IP address
+    host_ip='192.168.178.146',  # 10.1.1.0
     host_port=5000,
 ):
     return (
