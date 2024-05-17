@@ -181,19 +181,29 @@ def detect(save_img=False):
                 cv2.imwrite("super_image.jpeg", im0)
                 print("Saved image")
 
+                image_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                image_sock.connect(("10.1.1.0", 12345))
+                
+                description_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                description_sock.connect(("10.1.1.0", 12346))
+
                 image = cv2.imread("super_image.jpeg")
                 
                 image_array = np.array(image)
                 image_bytes = image_array.tobytes()
 
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sock.connect(("10.1.1.0", 12345))
-                
-                sock.sendall(struct.pack(">L", len(image_bytes)))
-                sock.sendall(image_bytes)
+                image_sock.sendall(struct.pack(">L", len(image_bytes)))
+                image_sock.sendall(image_bytes)
                 print("Image has been Sent")
+                
+                description_string = names[int(cls)] + " " + ('%g ' * len(line)).rstrip() % tuple(line) + '\n'
+                print(description_string)
+                data_to_send = description_string.encode()
+                data_length = struct.pack(">L", len(data_to_send))
+                description_sock.sendall(data_length + data_to_send)
 
-                sock.close()
+                image_sock.close()
+                description_sock.close()
 
             except Exception as e:
                 print(f"An error occurred: {e}")
