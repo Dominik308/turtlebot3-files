@@ -26,6 +26,8 @@ from utils.torch_utils import select_device, load_classifier, time_synchronized,
 
 import socket
 import struct
+import pickle
+
 
 
 def detect(save_img=False):
@@ -153,12 +155,13 @@ def detect(save_img=False):
                         n = (det[:, -1] == c).sum()  # detections per class
                         s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
+                    descriptions = []
                     # Write results
                     for *xyxy, conf, cls in reversed(det):
                         if save_txt:  # Write to file
                             xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
                             line = (cls, *xywh, conf) if opt.save_conf else (cls, *xywh)  # label format
-
+                            descriptions.append(names[int(cls)] + " " + ('%g ' * len(line)).rstrip() % line + '\n')
                             with open(txt_path + '.txt', 'a') as f:
                                 f.write(names[int(cls)] + " " + ('%g ' * len(line)).rstrip() % line + '\n')
 
@@ -196,12 +199,15 @@ def detect(save_img=False):
                 image_sock.sendall(image_bytes)
                 print("Image has been Sent")
                 
-                description_string = names[int(cls)] + " " + ('%g ' * len(line)).rstrip() % tuple(line) + '\n'
-                print(description_string)
-                data_to_send = description_string.encode()
-                data_length = struct.pack(">L", len(data_to_send))
-                description_sock.sendall(data_length + data_to_send)
-
+                #description_string = names[int(cls)] + " " + ('%g ' * len(line)).rstrip() % tuple(line) + '\n'
+                #print(description_string)
+                #data_to_send = description_string.encode()
+                #data_length = struct.pack(">L", len(data_to_send))
+                #description_sock.sendall(data_length + data_to_send)
+                description_data = pickle.dumps(descriptions)
+                length = struct.pack(">L", len(description_data))
+                description_sock.sendall(length + description_data)
+                
                 image_sock.close()
                 description_sock.close()
 
