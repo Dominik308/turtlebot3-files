@@ -3,11 +3,12 @@ import struct
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
+import pickle
 
 class DescriptionPublisher(Node):
     def __init__(self):
         super().__init__('description_publisher')
-        self.publisher_ = self.create_publisher(String, '/description', 10)
+        self.publisher_ = self.create_publisher(String, '/description', 2)
         self.timer_period = 0.1
         self.timer = self.create_timer(self.timer_period, self.publish_description)
         self.description = None
@@ -45,9 +46,9 @@ def main():
                         to_read = length - len(received_bytes)
                         received_bytes += conn.recv(4096 if to_read > 4096 else to_read)
 
-                    string = received_bytes.decode()
-                    print("Received string:", string)
-                    description_publisher.set_description(string)
+                    received_list = pickle.loads(received_bytes)
+                    print("Received list:", received_list)
+                    description_publisher.set_description(str(received_list))
             except Exception as e:
                 print(f"Error receiving or processing data: {e}")
             finally:
