@@ -11,7 +11,7 @@ class MarkerPublisher(Node):
         self.subscription = self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
         self.description_subscription = self.create_subscription(String, '/description', self.description_callback, 1)
         self.user_input = None  # Set user_input as an instance variable
-        self.map_frame_id = 'map'  # Define the map frame ID
+        self.map_frame_id = 'odom'  # Use 'odom' as the frame ID for consistency
         self.descriptions = []  # To store the parsed descriptions
 
     def odom_callback(self, msg):
@@ -59,24 +59,27 @@ class MarkerPublisher(Node):
 
         # Text marker
         text_marker = Marker()
-        text_marker.header.frame_id = "odom"
+        text_marker.header.frame_id = self.map_frame_id  # Ensure the frame ID matches the odometry frame
         text_marker.header.stamp = self.get_clock().now().to_msg()
         text_marker.ns = "image_description"
         text_marker.id = description['id'] + 1000
         text_marker.type = Marker.TEXT_VIEW_FACING
         text_marker.action = Marker.ADD
-        self.get_logger().info(f"x: {position.x}, y: {position.y}, z: {position.z}")
-        text_marker.pose.position.x = position.x + (description['x'] * 4)
-        text_marker.pose.position.y = position.y
-        text_marker.pose.position.z = position.z + 1.0
-        text_marker.pose.orientation.x = 0.5
+
+        print("Robots position x: " + str(position.x) + " y: " + str(position.y))
+
+        # Adjust the marker's position based on odometry and description coordinates
+        text_marker.pose.position.x = position.x + description['x']
+        text_marker.pose.position.y = (position.y - description['y']) - description['y']
+        text_marker.pose.position.z = position.z + 1.0  # Elevate the marker slightly for visibility
+        text_marker.pose.orientation.x = 0.0
         text_marker.pose.orientation.y = 0.0
         text_marker.pose.orientation.z = 0.0
         text_marker.pose.orientation.w = 1.0
         text_marker.scale.z = 0.2
         text_marker.color.a = 1.0
         text_marker.color.r = 0.0
-        text_marker.color.g = 0.0
+        text_marker.color.g = 1.0  # Green for visibility
         text_marker.color.b = 0.0
         text_marker.text = f"{description['type']}"
 
