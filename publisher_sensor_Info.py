@@ -13,11 +13,11 @@ class SensorPublisher(Node):
         self.bumper = Button(4, pull_up=False)
         timer_period = 0.1  # seconds
 
-        self.sonar_publisher = self.create_publisher(String, 'SonarSensorInfo', 10)
+        self.sonar_publisher = self.create_publisher(String, 'SonarSensorInfo', 1)
         self.sonar_timer = self.create_timer(timer_period, self.publish_sonar)
         self.sonarCount = 0
 
-        self.bumper_publisher = self.create_publisher(Bool, 'BumperSensorInfo', 10)
+        self.bumper_publisher = self.create_publisher(Bool, 'BumperSensorInfo', 1)
         self.bumper_timer = self.create_timer(timer_period, self.publish_bumper)
         self.bumbperCount = 0
 
