@@ -1,63 +1,62 @@
-
-import rclpy
-from rclpy.node import Node
-
-from std_msgs.msg import String, Bool
-
-from gpiozero import DistanceSensor, Button
+import rclpy  #Import the ROS 2 Python client library
+from rclpy.node import Node  #Import the Node class from the ROS 2 library
+from std_msgs.msg import String, Bool  #Import standard message types for ROS 2
+from gpiozero import DistanceSensor, Button  #Import sensor classes from the gpiozero library
 
 class SensorPublisher(Node):
     def __init__(self):
-        super().__init__('SensorPublisher')
+        #Initialize the ROS 2 Node with the name SensorPublisher
+        super().__init__('SensorPublisher')  
+        
+        #Initialize the distance sensor connected to GPIO pins 9 and 10
         self.sensor = DistanceSensor(9, 10)
+        #Initialize the button (bumper) sensor connected to GPIO pin 4, without a pull-up resistor
         self.bumper = Button(4, pull_up=False)
-        timer_period = 0.1  # seconds
+        
+        timer_period = 0.1  #Set the timer period for sensor data publishing (in seconds)
 
+        #Create a publisher for the sonar sensor data
         self.sonar_publisher = self.create_publisher(String, 'SonarSensorInfo', 1)
+        #Create a timer that calls the 'publish_sonar' method at regular intervals
         self.sonar_timer = self.create_timer(timer_period, self.publish_sonar)
-        self.sonarCount = 0
 
+        #Create a publisher for the bumper sensor data
         self.bumper_publisher = self.create_publisher(Bool, 'BumperSensorInfo', 1)
+        #Create a timer that calls the 'publish_bumper' method at regular intervals
         self.bumper_timer = self.create_timer(timer_period, self.publish_bumper)
-        self.bumbperCount = 0
-
-
-    def __del__(self):
-        # Clean up the sensor
-        self.sensor.close()
-        self.bumper.close()
-
+        
+    #Method to publish sonar sensor data
     def publish_sonar(self):
-        msg = String()
-        msg.data = "%s" % self.sensor.distance
-        self.sonar_publisher.publish(msg)
-        self.get_logger().info('Publishing: "%s"' % msg.data)
-        self.sonarCount += 1
+        msg = String()  #Create a new String message
+        msg.data = "%s" % self.sensor.distance  #Message distance mesuared by sensor
+        self.sonar_publisher.publish(msg)  #Publish the message
+        self.get_logger().info('Publishing: "%s"' % msg.data)  #Log the published data
 
+    #Method to publish bumper sensor data
     def publish_bumper(self):
-        msg = Bool()
-        msg.data = self.bumper.is_pressed
-        self.bumper_publisher.publish(msg)
-        self.get_logger().info('Publishing: "%s"' % msg.data)
-        self.bumbperCount += 1
+        msg = Bool()  #Create a new Bool message
+        msg.data = self.bumper.is_pressed  #Set the message to the state of the bumper pressed or not
+        self.bumper_publisher.publish(msg)  #Publish the message
+        self.get_logger().info('Publishing: "%s"' % msg.data)  #Log the published data
+        
+    #Clean up method when the object is deleted
+    def __del__(self):
+        self.sensor.close()  #Close the distance sensor
+        self.bumper.close()  #Close the bumper sensor
 
-def main(args=None):
-    
-    rclpy.init(args=args)
-    sensorPublisher = SensorPublisher()
+def main():
+    rclpy.init()  #Initialize the ROS 2 Python client library
+    sensorPublisher = SensorPublisher()  #Create an instance of the SensorPublisher class
 
     try:
-        rclpy.spin(sensorPublisher)
+        rclpy.spin(sensorPublisher)  #Keep the node running until interrupted
     except KeyboardInterrupt:
-        # Handle the keyboard interrupt by printing a message
-        print("Interrupted by keyboard, cleaning up GPIOs...")
+        print("Interrupted by keyboard") #Handle the keyboard interrupt by printing a message
     finally:
-        # Clean up the sensors
-        sensorPublisher.sensor.close()
-        sensorPublisher.bumper.close()
-        # Destroy the node explicitly
-        sensorPublisher.destroy_node()
-        rclpy.shutdown()
+        sensorPublisher.sensor.close() #Clean up the sensors
+        sensorPublisher.bumper.close() #Clean up the sensors
+        sensorPublisher.destroy_node() #Destroy the node explicitly
+        rclpy.shutdown()  #Shutdown the ROS 2 Python client library
 
 if __name__ == '__main__':
-    main()
+    main()  #Call the main function if this script is executed
