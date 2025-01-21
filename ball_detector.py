@@ -2,19 +2,20 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
 from visualization_msgs.msg import Marker
-from nav_msgs.msg import Odometry
-from std_msgs.msg import String
 from geometry_msgs.msg import Point
 import numpy as np
 from scipy.optimize import least_squares
 from typing import Optional, Tuple
 import random
+import tf2_ros
+import tf2_geometry_msgs
 
 class BallDetector(Node):
     def __init__(self):
         super().__init__('lidar_arc_detector')
         self.user_input = None  # Set user_input as an instance variable
         self.map_frame_id = 'odom'  # Use 'odom' as the frame ID for consistency
+        
         #Set up QoS profile for LiDAR communication
         self.qos_profile = rclpy.qos.QoSProfile(
             reliability=rclpy.qos.ReliabilityPolicy.BEST_EFFORT,
@@ -22,19 +23,11 @@ class BallDetector(Node):
             depth=10
         )
         
+        #Publisher for the visualization marker
         self.publisher_ = self.create_publisher(
             Marker, 
             '/visualization_marker', 
             10
-        )
-
-
-        #Subscribe to the LiDAR /scan topic
-        self.subscription = self.create_subscription(
-            LaserScan,
-            '/scan',
-            self.lidar_callback,
-            self.qos_profile
         )
         
         #Publisher for the detected ball position
@@ -43,12 +36,20 @@ class BallDetector(Node):
             '/ball_position',
             self.qos_profile
         )
+        
+        #Subscribe to the LiDAR /scan topic
+        self.subscription = self.create_subscription(
+            LaserScan,
+            '/scan',
+            self.lidar_callback,
+            self.qos_profile
+        )
 
     def lidar_callback(self, msg: LaserScan) -> None:
         #Process LiDAR scan and detect ball using circle fitting.
         ranges = np.array(msg.ranges)  #Distance measurements from LiDAR
         angles = np.linspace(msg.angle_min, msg.angle_max, len(ranges))  #Corresponding angles
-        
+        #print(angles)
         # Filter valid LiDAR points
         valid_points = (ranges > msg.range_min) & (ranges < msg.range_max)
         if not np.any(valid_points):
@@ -81,13 +82,9 @@ class BallDetector(Node):
                 text_marker.action = Marker.ADD
 
                 # Adjust the marker's position based on odometry and description coordinates
-                text_marker.pose.position.x = ball_position.x
-                text_marker.pose.position.y = ball_position.y
-                text_marker.pose.position.z = ball_position.z + 1.0  # Elevate the marker slightly for visibility
-                text_marker.pose.orientation.x = 0.0
-                text_marker.pose.orientation.y = 0.0
-                text_marker.pose.orientation.z = 0.0
-                text_marker.pose.orientation.w = 1.0
+                text_marker.pose.position.x = 2.0
+                text_marker.pose.position.y = -1.0
+                text_marker.pose.position.z = 0.5
                 text_marker.scale.z = 0.2
                 text_marker.color.a = 1.0
                 text_marker.color.r = 0.0
@@ -110,7 +107,7 @@ class BallDetector(Node):
         result = least_squares(algebraic_circle, initial_guess, args=(x_coords, y_coords))
 
         if result.success:
-            return result.x  #(x_center, y_center, radius)
+            return result.x
         else:
             return None
 
