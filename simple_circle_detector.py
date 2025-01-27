@@ -20,14 +20,11 @@ class SimpleCircleDetector(Node):
             depth=10
         )
         
-        # Publisher for the visualization marker
-        self.publisher_ = self.create_publisher(
-            Marker, 
-            '/visualization_marker', 
-            10
-        )
+        # Publishers
+        self.marker_publisher = self.create_publisher(Marker, '/visualization_marker', 10)
+        self.base_publisher = self.create_publisher(PointStamped, '/ball_position_base', 10)
         
-        # Subscribe to the LiDAR /scan topic
+        # Subscribe to LiDAR
         self.subscription = self.create_subscription(
             LaserScan, 
             '/scan', 
@@ -40,6 +37,7 @@ class SimpleCircleDetector(Node):
         self.tf_listener = TransformListener(self.tf_buffer, self)
         
         self.map_frame_id = 'odom'
+        self.robot_base_frame = 'base_link'  # Change this to your robot's base frame
 
     def lidar_callback(self, msg):
         angles = np.linspace(msg.angle_min, msg.angle_max, len(msg.ranges))
@@ -50,7 +48,7 @@ class SimpleCircleDetector(Node):
         y = distances[valid] * np.sin(angles[valid])
         points = np.column_stack((x, y))
         
-        if len(points) < 5:
+        if len(points) < 10:
             return
 
         clusters = self.cluster_points(points)
@@ -60,10 +58,10 @@ class SimpleCircleDetector(Node):
             
             if center and (0.10 < radius < 0.15):
                 x_lidar, y_lidar = center
-                success = self.publish_transformed_marker(x_lidar, y_lidar, radius, msg)
+                self.publish_transformed_marker(x_lidar, y_lidar, radius, msg)
 
     def cluster_points(self, points):
-        clustering = DBSCAN(eps=0.15, min_samples=3).fit(points)
+        clustering = DBSCAN(eps=0.12, min_samples=5).fit(points)
         clusters = [points[clustering.labels_ == i] for i in set(clustering.labels_) if i != -1]
         return clusters
 
@@ -89,32 +87,58 @@ class SimpleCircleDetector(Node):
         point_lidar.point.z = 0.5
 
         try:
-            # Get transform to map frame using the latest available transform
-            # Allow some time for the transform to become available
-            transform = self.tf_buffer.lookup_transform(
+            # Get transforms
+            transform_to_odom = self.tf_buffer.lookup_transform(
                 self.map_frame_id,
                 point_lidar.header.frame_id,
-                rclpy.time.Time(),  # Use latest available transform
+                rclpy.time.Time(),
                 timeout=rclpy.duration.Duration(seconds=0.5)
             )
-            # Transform point to map frame
-            point_map = do_transform_point(point_lidar, transform)
             
-            # Publish marker
+            transform_to_base = self.tf_buffer.lookup_transform(
+                self.robot_base_frame,
+                point_lidar.header.frame_id,
+                rclpy.time.Time(),
+                timeout=rclpy.duration.Duration(seconds=0.5)
+            )
+
+            # Transform points
+            point_odom = do_transform_point(point_lidar, transform_to_odom)
+            point_base = do_transform_point(point_lidar, transform_to_base)
+
+            # Publish odom marker
             marker = Marker()
             marker.header.frame_id = self.map_frame_id
             marker.header.stamp = self.get_clock().now().to_msg()
             marker.type = Marker.SPHERE
-            marker.scale.x = marker.scale.y = marker.scale.z = 2 * radius
-            marker.color.a = 0.5
+            marker.scale.x = 2 * radius
+            marker.scale.y = 2 * radius
+            marker.scale.z = 2 * radius
+            marker.color.a = 1.0
             marker.color.r = 1.0
-            marker.pose.position.x = point_map.point.x
-            marker.pose.position.y = point_map.point.y
-            self.publisher_.publish(marker)
-            
-            self.get_logger().info(f"Ball at ({point_map.point.x:.2f}, {point_map.point.y:.2f})", throttle_duration_sec=1)
-            return True
-        except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException) as e:
+            marker.color.g = 0.0
+            marker.color.b = 0.0
+            marker.pose.position.x = point_odom.point.x
+            marker.pose.position.y = point_odom.point.y
+            self.marker_publisher.publish(marker)
+
+            # Publish base_link coordinates
+            base_point = PointStamped()
+            base_point.header.frame_id = self.robot_base_frame
+            base_point.header.stamp = self.get_clock().now().to_msg()
+            base_point.point = point_base.point
+            self.base_publisher.publish(base_point)
+
+            # Log both coordinates
+            self.get_logger().info(
+                f"Global (odom): ({point_odom.point.x:.2f}, {point_odom.point.y:.2f}) | "
+                f"Relative (base): ({point_base.point.x:.2f}, {point_base.point.y:.2f})",
+                throttle_duration_sec=1
+            )
+
+        except (tf2_ros.LookupException, 
+                tf2_ros.ConnectivityException, 
+                tf2_ros.ExtrapolationException) as e:
             self.get_logger().warn(f"TF error: {str(e)}", throttle_duration_sec=1)
             return False
 
