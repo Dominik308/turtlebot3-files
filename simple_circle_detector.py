@@ -1,8 +1,8 @@
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
-from visualization_msgs.msg import Marker
-from geometry_msgs.msg import PointStamped
+#from visualization_msgs.msg import Marker
+from geometry_msgs.msg import PointStamped, PoseStamped
 from tf2_ros import Buffer, TransformListener
 from tf2_geometry_msgs import do_transform_point
 import numpy as np
@@ -21,8 +21,9 @@ class SimpleCircleDetector(Node):
         )
         
         # Publishers
-        self.marker_publisher = self.create_publisher(Marker, '/visualization_marker', 10)
         self.base_publisher = self.create_publisher(PointStamped, '/ball_position_base', 10)
+        self.robot_position_publisher = self.create_publisher(PoseStamped, '/robot_position_odom', 10)  # NEW
+
         
         # Subscribe to LiDAR
         self.subscription = self.create_subscription(
@@ -36,8 +37,11 @@ class SimpleCircleDetector(Node):
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
         
-        self.map_frame_id = 'odom'
-        self.robot_base_frame = 'base_link'  # Change this to your robot's base frame
+        self.robot_base_frame = 'base_scan'  # Change this to your robot's base frame
+        self.odom_frame = 'odom'  # Global reference frame
+
+        self.timer = self.create_timer(0.1, self.publish_robot_position)  # NEW
+
 
     def lidar_callback(self, msg):
         angles = np.linspace(msg.angle_min, msg.angle_max, len(msg.ranges))
@@ -56,7 +60,7 @@ class SimpleCircleDetector(Node):
         for cluster in clusters:
             center, radius = self.fit_circle(cluster)
             
-            if center and (0.10 < radius < 0.15):
+            if center and (0.11 < radius < 0.16):
                 x_lidar, y_lidar = center
                 self.publish_transformed_marker(x_lidar, y_lidar, radius, msg)
 
@@ -80,67 +84,68 @@ class SimpleCircleDetector(Node):
     def publish_transformed_marker(self, x_lidar, y_lidar, radius, msg):
         # Create PointStamped in LiDAR frame
         point_lidar = PointStamped()
-        point_lidar.header.frame_id = msg.header.frame_id
+        point_lidar.header.frame_id = self.robot_base_frame  # Should be 'base_scan'
         point_lidar.header.stamp = msg.header.stamp
         point_lidar.point.x = x_lidar
         point_lidar.point.y = y_lidar
-        point_lidar.point.z = 0.5
+        point_lidar.point.z = 0.23  # Ground level
 
         try:
-            # Get transforms
+            # Transform to odom frame FIRST
             transform_to_odom = self.tf_buffer.lookup_transform(
-                self.map_frame_id,
+                self.odom_frame,
                 point_lidar.header.frame_id,
                 rclpy.time.Time(),
-                timeout=rclpy.duration.Duration(seconds=0.5)
             )
-            
+            point_odom = do_transform_point(point_lidar, transform_to_odom)
+
+            # Then transform to base_link
             transform_to_base = self.tf_buffer.lookup_transform(
                 self.robot_base_frame,
-                point_lidar.header.frame_id,
+                self.odom_frame,
                 rclpy.time.Time(),
                 timeout=rclpy.duration.Duration(seconds=0.5)
             )
+            point_base = do_transform_point(point_odom, transform_to_base)
 
-            # Transform points
-            point_odom = do_transform_point(point_lidar, transform_to_odom)
-            point_base = do_transform_point(point_lidar, transform_to_base)
-
-            # Publish odom marker
-            marker = Marker()
-            marker.header.frame_id = self.map_frame_id
-            marker.header.stamp = self.get_clock().now().to_msg()
-            marker.type = Marker.SPHERE
-            marker.scale.x = 2 * radius
-            marker.scale.y = 2 * radius
-            marker.scale.z = 2 * radius
-            marker.color.a = 1.0
-            marker.color.r = 1.0
-            marker.color.g = 0.0
-            marker.color.b = 0.0
-            marker.pose.position.x = point_odom.point.x
-            marker.pose.position.y = point_odom.point.y
-            self.marker_publisher.publish(marker)
-
-            # Publish base_link coordinates
             base_point = PointStamped()
             base_point.header.frame_id = self.robot_base_frame
-            base_point.header.stamp = self.get_clock().now().to_msg()
             base_point.point = point_base.point
             self.base_publisher.publish(base_point)
+            
+            self.get_logger().info(f"Ball position: ({point_base.point.x:.2f}, {point_base.point.y:.2f})")
 
-            # Log both coordinates
-            self.get_logger().info(
-                f"Global (odom): ({point_odom.point.x:.2f}, {point_odom.point.y:.2f}) | "
-                f"Relative (base): ({point_base.point.x:.2f}, {point_base.point.y:.2f})",
-                throttle_duration_sec=1
+        except tf2_ros.TransformException as e:
+            self.get_logger().warn(f"TF error: {str(e)}")
+        
+        
+    def publish_robot_position(self):  # NEW METHOD
+        try:
+            # Get robot's position in odom frame
+            transform = self.tf_buffer.lookup_transform(
+                self.odom_frame,
+                self.robot_base_frame,
+                rclpy.time.Time(),
+                timeout=rclpy.duration.Duration(seconds=0.1)
             )
-
+            
+            # Create and publish PoseStamped message
+            pose_msg = PoseStamped()
+            pose_msg.header.stamp = self.get_clock().now().to_msg()
+            pose_msg.header.frame_id = self.odom_frame
+            pose_msg.pose.position.x = transform.transform.translation.x
+            pose_msg.pose.position.y = transform.transform.translation.y
+            pose_msg.pose.position.z = transform.transform.translation.z
+            pose_msg.pose.orientation = transform.transform.rotation
+            
+            self.get_logger().info(f"Robot position: ({pose_msg.pose.position.x:.2f}, {pose_msg.pose.position.y:.2f})")
+            
+            self.robot_position_publisher.publish(pose_msg)
+            
         except (tf2_ros.LookupException, 
                 tf2_ros.ConnectivityException, 
                 tf2_ros.ExtrapolationException) as e:
-            self.get_logger().warn(f"TF error: {str(e)}", throttle_duration_sec=1)
-            return False
+            self.get_logger().warn(f"Robot position TF error: {str(e)}", throttle_duration_sec=1)
 
 def main(args=None):
     rclpy.init(args=args)
