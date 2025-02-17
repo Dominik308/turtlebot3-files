@@ -129,10 +129,12 @@ class StableBaselines3Inference(Node):
 
         obs = {
             "obs": [
-                self.ball_dir_vec[0],
-                self.ball_dir_vec[1],
-                ball_pos_rel.point.y / self.FACTOR,
-                ball_pos_rel.point.x / self.FACTOR,
+                - self.ball_dir_vec[1],
+                - self.ball_dir_vec[0],
+                # - ball_pos_rel.point.y / self.FACTOR, #not relevant, the ai learned without it
+                # - ball_pos_rel.point.x / self.FACTOR, #not relevant, the ai learned without it
+                0.0,
+                0.0,
             ]
         }
 
@@ -142,8 +144,8 @@ class StableBaselines3Inference(Node):
             f"\nObs: ({obsv[0]:.4f} | {obsv[1]:.4f} | {obsv[2]:.4f} | {obsv[3]:.4f}) \nAction: ({action[0]:.4f} | {action[1]:.4f})"
         )
 
-        self.vel_target = -np.clip(action[0] * 0.20, -0.10, 0.20)
-        self.ang_target = -action[1] * 2.0
+        self.vel_target = np.clip(action[1] * 0.20, -0.10, 0.20)
+        self.ang_target = action[0] * 2.0
 
 def main(args=None):
     rclpy.init(args=args)
