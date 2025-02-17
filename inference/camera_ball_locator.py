@@ -73,7 +73,7 @@ class StableBaselines3Inference(Node):
             self.ball_dir_vec = (0.0, 0.0)
         else:
             self.ball_visible = 1
-            angle_deg = self.ball_angle * 60.0 
+            angle_deg = self.ball_angle * (180 / math.pi)
             rad = math.radians(-angle_deg) 
             cos_r = math.cos(rad)
             sin_r = math.sin(rad)
@@ -131,8 +131,8 @@ class StableBaselines3Inference(Node):
             "obs": [
                 self.ball_dir_vec[0],
                 self.ball_dir_vec[1],
-                ball_pos_rel.point.x / self.FACTOR,
                 ball_pos_rel.point.y / self.FACTOR,
+                ball_pos_rel.point.x / self.FACTOR,
             ]
         }
 
